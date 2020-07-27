@@ -3,10 +3,17 @@ import numpy as np
 import pandas as pd
 from collections import OrderedDict
 from scipy.stats.mstats import winsorize
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 from rv.datamodels.daily_movement import OneDay
+from rv.preprocessing import MINUTE_IN_TRADING_DAY
 
+RETURN = 'return'
+CUM_RETURN = "CUM_RETURN"
 DAYS_IN_A_YEAR = 365
+TRADING_DAY_IN_YEAR = 252
+MINUTE_IN_HALF_TRADING_DAY = int(MINUTE_IN_TRADING_DAY / 2)
 
 class VolatilitySignatureCalculator:
     def __init__(self, max_lag):
@@ -64,3 +71,37 @@ class RealizedVolatilityCalculator:
             rv = self.realized_vol(daily_data, end_index, tenor_in_days, intraday_fraction, sample_interval)
             realized_volatilities.append(rv)
         return realized_volatilities
+
+    def calculate_realized_volatilities(daily_data: 'OrderedDict[int, OneDay]', intraday_fraction: float) -> pd.DataFrame:
+        realized_variances = []
+
+        lags = range(1, MINUTE_IN_HALF_TRADING_DAY + 1, 15)
+        for _, one_day in daily_data.items():
+            returns = one_day.intraday_prices
+            # returns[CUM_RETURN] = np.cumsum(returns[RETURN])
+            column_names = [f"SAMPLE_{tau}" for tau in lags]
+            for i, tau in enumerate(lags):
+                returns[column_names[i]] = returns[RETURN].shift(-tau - 1)
+            covariance_matrix = returns[column_names].dropna().cov().iloc[0, :]
+            overall_variance = np.var(returns[RETURN])
+            realized_variances_per_day = []
+            for i in range(len(lags)):
+                summed_covariances = 0.0
+                for j in range(1, i + 1):
+                    summed_covariances += (1.0 - j / i) * covariance_matrix.iloc[j - 1]
+                realized_variance = overall_variance + 2.0 * summed_covariances
+                realized_variances_per_day.append(realized_variance)
+            realized_variances.append(realized_variances_per_day)
+
+        realized_variances = np.array(realized_variances)
+        means = np.mean(realized_variances, axis=0)
+        stds = np.std(realized_variances, axis=0)
+        standardized_rv = StandardScaler().fit_transform(np.array(realized_variances))
+        pca = PCA(n_components=3)
+        principal_components = pca.fit_transform(standardized_rv)
+        assert np.sum(pca.explained_variance_ratio_) > 0.95, "Explained variance ratio too small"
+        fitted_standarzied_varianced = pca.components_.T.dot(np.mean(principal_components, axis=0))
+        fitted_variances = np.multiply(fitted_standarzied_varianced, stds) + means
+        vol_times = [tau / MINUTE_IN_TRADING_DAY * intraday_fraction / TRADING_DAY_IN_YEAR for tau in lags]
+        fitted_realized_volatility = np.sqrt(fitted_variances / vol_times)
+        return fitted_realized_volatility

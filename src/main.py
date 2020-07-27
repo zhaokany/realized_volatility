@@ -5,7 +5,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import r2_score
 
-from rv.preprocessing import prepare, prepare_minute, prepared_hourly, prepare_daily, prepare_minute, calculate_intraday_fraction, calculate_realized_vols, generate_rv_features
+from rv.preprocessing import prepare, remove_overnight_jumps, calculate_intraday_fraction
 from rv.calculator import RealizedVolatilityCalculator, VolatilitySignatureCalculator
 from rv.estimators.rv_regressor import EWMAEstimator
 from rv.utils.ts_plot import tsplot
@@ -20,30 +20,36 @@ if __name__ == "__main__":
         "f": (0.005, 0.003),
     }
     tenor_in_days = 22
-    # for stock_column_name in ["a", "b", "c", "d", "e", "f"]:
-    for stock_column_name in ["a"]:
+    for stock_column_name in ["a", "b", "c", "d", "e", "f"]:
+    # for stock_column_name in ["f"]:
         day_fraction_limits, intraday_limits = winsorized_limit[stock_column_name]
         print(stock_column_name)
         daily_data = prepare("../data/stockdata3.csv", stock_column_name)
+        daily_data = remove_overnight_jumps(daily_data)
         intraday_fraction, overnight_fraction = calculate_intraday_fraction(daily_data, day_fraction_limits)
         print(f"intraday_fraction={intraday_fraction}")
 
-        prepare_minute(daily_data)
+        calculator = RealizedVolatilityCalculator
+        rv = calculator.calculate_realized_volatilities(daily_data, intraday_fraction)
+        print(rv[-1])
 
+        # plt.plot(rv)
+        # plt.show()
 
-        n_hours_per_day = 9
-        n_minute_per_hour = 60
-
-        n_days = 66
-        n_hours = n_days * n_hours_per_day
-
-        daily_returns = prepare_daily(daily_data)
-        # tsplot(daily_returns['return'])
-        tau = 1.0 / 252
-        volatility_daily_frequency = np.sqrt(np.var(daily_returns['return']))
-        vsc_daily = VolatilitySignatureCalculator(n_days + 1)
-        volatility_signature_daily = vsc_daily.calculate(daily_returns, volatility_daily_frequency)
-        volatility_signature_daily_in_year = volatility_signature_daily / np.sqrt(tau)
+        #
+        # n_hours_per_day = 9
+        # n_minute_per_hour = 60
+        #
+        # n_days = 66
+        # n_hours = n_days * n_hours_per_day
+        #
+        # daily_returns = prepare_daily(daily_data)
+        # # tsplot(daily_returns['return'])
+        # tau = 1.0 / 252
+        # volatility_daily_frequency = np.sqrt(np.var(daily_returns['return']))
+        # vsc_daily = VolatilitySignatureCalculator(n_days + 1)
+        # volatility_signature_daily = vsc_daily.calculate(daily_returns, volatility_daily_frequency)
+        # volatility_signature_daily_in_year = volatility_signature_daily / np.sqrt(tau)
 
 
         # hourly_returns = prepared_hourly(daily_data, 1.0 - intraday_fraction)[['return']]
@@ -64,9 +70,9 @@ if __name__ == "__main__":
         # volatility_signature_minute_in_year = volatility_signature_minute / np.sqrt(tau_minute)
         # plt.plot(volatility_signature_minute_in_year, label="minute")
         # plt.plot(range(1, n_hours * n_minute_per_hour, n_minute_per_hour), volatility_signature_hourly_in_year, label="hourly")
-        plt.plot(range(1, n_days * n_hours * n_minute_per_hour, n_hours * n_minute_per_hour), volatility_signature_daily_in_year, label="daily")
-        plt.legend()
-        plt.show()
+        # plt.plot(range(1, n_days * n_hours * n_minute_per_hour, n_hours * n_minute_per_hour), volatility_signature_daily_in_year, label="daily")
+        # plt.legend()
+        # plt.show()
 
 
         # calculator = RealizedVolatilityCalculator(intraday_limits)
