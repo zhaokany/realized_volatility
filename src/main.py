@@ -1,11 +1,13 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import r2_score
 
-from rv.preprocessing import prepare, remove_overnight_jumps, calculate_intraday_fraction
+from rv.datamodels.daily_movement import OneDay, DAY, TIMESTR, PRICE
+from rv.preprocessing import prepare, clean_data, calculate_intraday_fraction
 from rv.calculator import RealizedVolatilityCalculator, VolatilitySignatureCalculator
 from rv.estimators.rv_regressor import EWMAEstimator
 from rv.utils.ts_plot import tsplot
@@ -20,12 +22,14 @@ if __name__ == "__main__":
         "f": (0.005, 0.003),
     }
     tenor_in_days = 22
+    all_data = pd.read_csv("../data/stockdata3.csv")
     for stock_column_name in ["a", "b", "c", "d", "e", "f"]:
-    # for stock_column_name in ["f"]:
+    # for stock_column_name in ["d"]:
         day_fraction_limits, intraday_limits = winsorized_limit[stock_column_name]
         print(stock_column_name)
-        daily_data = prepare("../data/stockdata3.csv", stock_column_name)
-        daily_data = remove_overnight_jumps(daily_data)
+        data = all_data[[DAY, TIMESTR, stock_column_name]].rename(columns={stock_column_name: PRICE})
+        daily_data = prepare(data)
+        daily_data = clean_data(daily_data)
         intraday_fraction, overnight_fraction = calculate_intraday_fraction(daily_data, day_fraction_limits)
         print(f"intraday_fraction={intraday_fraction}")
 

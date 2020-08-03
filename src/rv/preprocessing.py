@@ -3,6 +3,7 @@ from typing import Tuple
 import pandas as pd
 import numpy as np
 from scipy.stats.mstats import winsorize
+from scipy import stats
 
 
 
@@ -17,29 +18,28 @@ def fill_zeros_with_interpolation(df: pd.DataFrame) -> pd.DataFrame:
     return df_tmp.interpolate()
 
 
-def drop_zeros(df: pd.DataFrame) -> pd.DataFrame:
-    df_tmp = df.replace(0, np.nan)
-    return df_tmp.dropna()
+# def drop_zeros(df: pd.DataFrame) -> pd.DataFrame:
+#     df_tmp = df.replace(0, np.nan)
+#     return df_tmp.dropna()
 
 
-def prepare(data_file_path: str, column_name: str) -> 'OrderedDict[int, OneDay]':
-    raw_data = pd.read_csv(data_file_path)
-    stock_data = raw_data[[DAY, TIMESTR, column_name]].groupby(DAY)
+def prepare(df: pd.DataFrame) -> 'OrderedDict[int, OneDay]':
+    stock_data = df.groupby(DAY)
     daily_data = OrderedDict()
     previous_open = None
     previous_close = None
     counter = 0
     for group, grouped in stock_data:
-        open = grouped.iloc[0][column_name]
-        close = grouped.iloc[-1][column_name]
+        grouped = fill_zeros_with_interpolation(grouped)
+        open = grouped.iloc[0][PRICE]
+        close = grouped.iloc[-1][PRICE]
 
         if not np.isnan(open) and not np.isnan(close):
             if previous_open is not None and previous_close is not None:
                 if not np.isnan(previous_open) and not np.isnan(previous_close):
-                    grouped_data = fill_zeros_with_interpolation(grouped)
-                    intraday_data = grouped_data.rename(columns={column_name: PRICE}).drop(columns=[DAY])
+                    intraday_data = grouped.drop(columns=[DAY])
                     if len(intraday_data) == MINUTE_IN_TRADING_DAY:
-                        hourly_data = grouped_data[grouped_data[TIMESTR].str.contains(":00:00")][column_name].values
+                        hourly_data = grouped[grouped[TIMESTR].str.contains(":00:00")][PRICE].values
                         one_day = OneDay(open, close, previous_open, previous_close, intraday_data, hourly_data)
                         daily_data[counter] = one_day
                         counter += 1
@@ -49,38 +49,59 @@ def prepare(data_file_path: str, column_name: str) -> 'OrderedDict[int, OneDay]'
     return daily_data
 
 
+def clean_data(daily_data: 'OrderedDict[int, OneDay]') -> 'OrderedDict[int, OneDay]':
+    cleaned_data = remove_intraday_outliers(remove_overnight_jumps(daily_data))
+    print("Data cleaned")
+    return cleaned_data
+
+
 def remove_overnight_jumps(daily_data: 'OrderedDict[int, OneDay]') -> 'OrderedDict[int, OneDay]':
-    adjustment = 0.0
+    cum_adjustment = 0.0
 
     overnight_returns = [np.log(v.open_price / v.previous_close) for k, v in daily_data.items()]
     stdev = np.std(overnight_returns)
-    stdev_threshold = stdev * 3.0
-    relative_threahold = 0.1
+    stdev_threshold = stdev * 1.5
+    relative_threahold = 0.0
     for day, daily in daily_data.items():
         adjusted_intraday_prices = daily.intraday_prices
-        if adjustment != 0.0:
-            daily.open_price += adjustment
-            daily.close_price += adjustment
-            daily.previous_open += adjustment
-            daily.previous_close += adjustment
+        if cum_adjustment != 0.0:
+            daily.open_price += cum_adjustment
+            daily.close_price += cum_adjustment
+            daily.previous_open += cum_adjustment
+            daily.previous_close += cum_adjustment
         ratio = daily.open_price / daily.previous_close
         if np.abs(ratio - 1.0) > relative_threahold and np.abs(np.log(ratio)) > stdev_threshold:
             new_adjustment = daily.previous_close - daily.open_price
             daily.open_price += new_adjustment
             daily.close_price += new_adjustment
-            adjustment += new_adjustment
-            print(f"new adjustment at day {day} with amount {adjustment}")
-        adjusted_intraday_prices[PRICE] += adjustment
-        adjusted_intraday_prices[RETURN] = np.log(adjusted_intraday_prices[PRICE]).diff()
-        daily.intraday_prices = adjusted_intraday_prices[[RETURN]].dropna()
+            cum_adjustment += new_adjustment
+            print(f"new_adjustment/cum_adjustment at day {day} with amount {new_adjustment}/{cum_adjustment}")
+        adjusted_intraday_prices[PRICE] += cum_adjustment
+        daily.intraday_prices = adjusted_intraday_prices
     return daily_data
 
 
 def remove_intraday_outliers(daily_data: 'OrderedDict[int, OneDay]') -> 'OrderedDict[int, OneDay]':
     for day, daily in daily_data.items():
-        returns = daily.intraday_prices[RETURN]
-        daily.intraday_prices[RETURN] = returns.between(returns.quantile(.05), returns.quantile(.95))
+        df = daily.intraday_prices.loc[daily.intraday_prices[PRICE] > 0.0]
+        mean = df[PRICE].mean()
+        stdev = df[PRICE].std()
+        df2 = df.loc[((df[PRICE]-mean) / stdev).abs() < 3.0].copy()
+        df2.loc[:, "log_price"] = np.log(df2[PRICE])
+        df2.loc[:, "prev_log_price"] = df2["log_price"].shift(1)
+        df2.loc[:, RETURN] = df2["log_price"] - df2["prev_log_price"]
+        daily.intraday_prices = df2.dropna()
     return daily_data
+
+
+def prepare_minute(daily_data: 'OrderedDict[int, OneDay]') -> pd.DataFrame:
+    minute_data = []
+
+    for _, one_day in daily_data.items():
+        df = one_day.intraday_prices
+        df[RETURN] = np.log(df[PRICE]).diff()
+        minute_data.append(df[RETURN].dropna().values)
+    return np.concatenate(minute_data)
 
 
 def prepared_hourly(daily_data: 'OrderedDict[int, OneDay]', overnight_fraction: float) -> pd.DataFrame:
