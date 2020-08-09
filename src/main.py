@@ -1,6 +1,6 @@
 import pandas as pd
 
-from rv.datamodels.daily_movement import OneDay, DAY, TIMESTR, PRICE
+from rv.datamodels.daily_movement import DAY, TIMESTR, PRICE
 from rv.preprocessing import prepare, clean_data, calculate_intraday_fraction
 from rv.datamodels.config import Config
 from rv.calculator import RealizedVolatilityCalculator
