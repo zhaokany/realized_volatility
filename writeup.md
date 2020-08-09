@@ -8,10 +8,10 @@
 I was given price data for approximately a year, sampled at 1 minute for 6 stocks and was asked to produce a fair estimator of the volaility over the next month.
 
 ## Summary
-Data clean is performed in a way to mitigate the negative impact of missing data or sudden price moves on volatility estimation, modelled via the covariance of an autoregressed return time series of high frequency. A volatility signature is then obtained for each trading day, producing a new data set (one sample per day) ready for PCA-based unsupervised learning method. The learning method produce estimated volatilities of different time horizon, from which we chose the longest to be a candidate extrapolated for even longer horizon. The model also provided us with the confidence interval based on the explained variance ratio by the PCA components.
+Data cleaning is performed in a way to mitigate the negative impact of missing data or sudden price moves on volatility estimation, modelled via the covariance of an autoregressed return time series of high frequency. A volatility signature is then obtained for each trading day, producing a new data set (one sample per day) ready for PCA-based unsupervised learning method. The learning method produce estimated volatilities of different time horizon, from which we chose the longest to be a candidate extrapolated for even longer horizon. The model also provided us with the confidence interval based on the explained variance ratio by the PCA components.
 
 ## Submissions:
-Execute src/main.py will display the estimated volatility and some auxiliary informaiton for each stock.
+See README.md for details of how to execute the program and visualize data.
 
 - Python code base
 1. Executable: src/main.py
@@ -31,7 +31,7 @@ The given data only comprises of stock prices, thus containing very scarce featu
 
 - Frequency
 
-The task is to estimate a monthly Volatility which is for a long term horizon, whereas the given data is sampled every minute which is a very short term horizon and thus of much higher frequency. It would be inappropriate to resample the raw dataset and use the prices every month apart to calculate the estimated volatility as this method doesn't count for intraday/overnight session properly. Nor is it sensible to reduce the dataset by only keeping daily closing prices. Plus, the information of the dataset will be under-utilized if we decide not to exploit the higher frequency, 1-minute data. So I have decided to stick to the original sample frequency and try to extract useful information for the monthly volatility estimation. As I will elaborate in "Chossen Approach" section, 1-minute time series exhibits more stationariness than longer horizon such as daily or monthly, making them more suitable to be applied in the Random Walk Model.
+The task is to estimate a monthly volatility which is for a long term horizon, whereas the given data is sampled every minute which is a very short term horizon and thus of much higher frequency. It would be inappropriate to resample the raw dataset and use the prices every month apart to calculate the estimated volatility as this method doesn't count for intraday/overnight session properly. Nor is it sensible to reduce the dataset by only keeping daily closing prices. Plus, the information of the dataset will be under-utilized if we decide not to exploit the higher frequency, 1-minute data. So I have decided to stick to the original sample frequency and try to extract useful information for the monthly volatility estimation. As I will elaborate in "Chossen Approach" section, 1-minute time series exhibits more stationariness than longer horizon such as daily or monthly, making them more suitable to be applied in the Random Walk Model.
 
 - Price jumps
 
