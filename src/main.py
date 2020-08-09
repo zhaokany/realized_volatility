@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 
 from rv.datamodels.daily_movement import DAY, TIMESTR, PRICE
@@ -15,7 +16,8 @@ if __name__ == "__main__":
         "e": Config(0.05, 3.0, 0.05),
         "f": Config(0.005, 3.0, 0.05),
     }
-    all_data = pd.read_csv("../data/stockdata3.csv")
+    file_name = sys.argv[1]
+    all_data = pd.read_csv(file_name)
     for stock_name in ["a", "b", "c", "d", "e", "f"]:
         config = configs[stock_name]
         print("=== ===")
